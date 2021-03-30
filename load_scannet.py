@@ -2,22 +2,13 @@ import numpy as np
 import torch
 import os
 import cv2
-import math
-import datetime
 import mmap
 import random
-import numba as nb
 import struct
 
-from scipy.spatial.distance import cdist
 from torch.utils.data import Dataset
 from models.utils import SceneInfo
-from models.superpoint import SuperPoint
 
-import matplotlib.pyplot as plt
-from models.utils import plot_matches, plot_keypoints, make_matching_plot, plot_image_pair
-import matplotlib
-matplotlib.use('TkAgg')
 random.seed(3)
 
 # separating these objects so that the data loader doesnt attempt to copy them to other processes
