@@ -11,6 +11,7 @@ import numba as nb
 import matplotlib.pyplot as plt
 
 #TODO - parameterize this script
+data_dir = "~/scannet/raw/scans"
 
 h = 480
 w = 640
@@ -195,9 +196,6 @@ class ScanProcessor:
 
 
 if __name__ == '__main__':
-
-    return #todo
-    data_dir = "~/scannet/raw/scans"
 
     for scanId in os.listdir(data_dir):
 

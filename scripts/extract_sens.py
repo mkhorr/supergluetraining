@@ -5,14 +5,15 @@ from multiprocessing.pool import ThreadPool
 import subprocess
 import numpy as np
 import time
+import psutil
 
 # todo - make these commandline args
 sens_reader_path = "~/ScanNet-master/SensReader/c++/x64/Release/sens.exe"
 input_dir = "~/scannet/raw/scans"
-output_dir = "~/tmp"
+output_dir = "~/scannet/raw/scans"
 convert_pgm_to_png = True
-remove_sens_file = False
-resize_color_img = False
+remove_sens_file = True
+resize_color_img = True
 color_width = 640
 color_height = 480
 
@@ -161,7 +162,7 @@ def convert_pgms(input_path):
                     img.save(filepath)
 
     # todo - manage threads and processes better
-    with ThreadPool(processes=12) as p:
+    with ThreadPool(processes=psutil.cpu_count(logical=False)-1) as p:
         p.map(convert_to_png, os.listdir(input_path))
     
     # rewrite color intrinsic matrix
@@ -202,9 +203,7 @@ def process_sens(scan_id):
 
 
 if __name__ == '__main__':
-    return #todo
-    start = time.time()
 
     # todo - manage threads and processes better
-    with ThreadPool(processes=12) as p:
+    with ThreadPool(processes=psutil.cpu_count(logical=False)-1) as p:
         p.map(process_sens, os.listdir(input_dir))
