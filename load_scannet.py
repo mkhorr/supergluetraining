@@ -9,7 +9,7 @@ import struct
 from torch.utils.data import Dataset
 from models.utils import SceneInfo
 
-random.seed(3)
+#random.seed(3)
 
 # separating these objects so that the data loader doesnt attempt to copy them to other processes
 class SceneFiles():

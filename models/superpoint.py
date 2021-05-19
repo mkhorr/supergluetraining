@@ -186,6 +186,15 @@ class SuperPoint(nn.Module):
         # Convert (h, w) to (x, y)
         keypoints = [torch.flip(k, [1]).float() for k in keypoints]
 
+        # adding random keypoints with score of 0 to ensure a fixed number of keypoints
+        keypoints = [ torch.cat((k,
+                        torch.cat((torch.cuda.FloatTensor(self.config['max_keypoints'] - k.shape[0],1).uniform_()*w,
+                                   torch.cuda.FloatTensor(self.config['max_keypoints'] - k.shape[0],1).uniform_()*h),
+                        axis=1)), axis=0) for k in keypoints]
+        scores = [ torch.cat((s,
+                        torch.cuda.FloatTensor((self.config['max_keypoints'] - s.shape[0])).fill_(0)),
+                        axis=0) for s in scores]
+
         # Compute the dense descriptors
         cDa = self.relu(self.convDa(x))
         descriptors = self.convDb(cDa)
