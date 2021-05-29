@@ -7,11 +7,6 @@ from models.superglue import SuperGlue
 from models.superpoint import SuperPoint
 from utils import ground_truth_matches
 from multiprocessing import Pool
-#from torch.multiprocessing import Pool, Process, set_start_method
-#try:
-#    set_start_method('spawn')
-#except RuntimeError:
-#    pass
 
 
 def loss_fn(P, match_indices0, match_indices1, match_weights0, match_weights1):
