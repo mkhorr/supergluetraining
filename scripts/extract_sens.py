@@ -6,16 +6,11 @@ import subprocess
 import numpy as np
 import time
 import psutil
+import argparse
 
-# todo - make these commandline args
-sens_reader_path = "~/ScanNet-master/SensReader/c++/x64/Release/sens.exe"
-input_dir = "~/scannet/raw/scans"
-output_dir = "~/scannet/raw/scans"
-convert_pgm_to_png = True
-remove_sens_file = True
-resize_color_img = True
-color_width = 640
-color_height = 480
+import time
+
+opt = None
 
 class SceneInfo:
 
@@ -60,71 +55,13 @@ class SceneInfo:
         self.calibration_color_intrinsic = np.diag([scale_x, scale_y, 1, 1]) @ self.calibration_color_intrinsic
         self.color_width = w
         self.color_height = h
-
-
-# for some reason, there are two .txt files in each scan directory with similar information
-class SceneInformation:
-    def __init__(self, infofile):
-        items = {}
-        with open(infofile) as file:
-            for line in file:
-                k, v = [x.strip() for x in line.partition("=")[::2]]
-                items[k] = v
-
-        self.axis_alignment = np.fromstring(items["axisAlignment"], sep=" ").reshape((4,4))
-        self.color_height = int(items["colorHeight"])
-        if "colorToDepthExtrinsics" in items:
-            self.color_to_depth_extrinsics = np.fromstring(items["colorToDepthExtrinsics"], sep=" ").reshape((4,4))
-        else:
-            self.color_to_depth_extrinsics = None
-        self.color_width = int(items["colorWidth"])
-        self.depth_height = int(items["depthHeight"])
-        self.depth_width = int(items["depthWidth"])
-        self.fx_color = float(items["fx_color"])
-        self.fx_depth = float(items["fx_depth"])
-        self.fy_color = float(items["fy_color"])
-        self.fy_depth = float(items["fy_depth"])
-        self.mx_color = float(items["mx_color"])
-        self.mx_depth = float(items["mx_depth"])
-        self.my_color = float(items["my_color"])
-        self.my_depth = float(items["my_depth"])
-        self.num_color_frames = int(items["numColorFrames"])
-        self.num_depth_frames = int(items["numDepthFrames"])
-        self.num_IMU_measurements = int(items["numIMUmeasurements"])
-        self.scene_type = items["sceneType"]
-
     
-    def write(self, outfile):
-        with open(outfile, 'w') as file:
-            file.write("axisAlignment = " + mat4_str(self.axis_alignment) + "\n")
-            file.write("colorHeight = " + str(self.color_height) + "\n")
-            if self.color_to_depth_extrinsics is not None:
-                file.write("colorToDepthExtrinsics = " + mat4_str(self.color_to_depth_extrinsics) + "\n")
-            file.write("colorWidth = " + str(self.color_width) + "\n")
-            file.write("depthHeight = " + str(self.depth_height) + "\n")
-            file.write("depthWidth = " + str(self.depth_width) + "\n")
-            file.write("fx_color = " + str(self.fx_color) + "\n")
-            file.write("fx_depth = " + str(self.fx_depth) + "\n")
-            file.write("fy_color = " + str(self.fy_color) + "\n")
-            file.write("fy_depth = " + str(self.fy_depth) + "\n")
-            file.write("mx_color = " + str(self.mx_color) + "\n")
-            file.write("mx_depth = " + str(self.mx_depth) + "\n")
-            file.write("my_color = " + str(self.my_color) + "\n")
-            file.write("my_depth = " + str(self.my_depth) + "\n")
-            file.write("numColorFrames = " + str(self.num_color_frames) + "\n")
-            file.write("numDepthFrames = " + str(self.num_depth_frames) + "\n")
-            file.write("numIMUmeasurements = " + str(self.num_IMU_measurements) + "\n")
-            file.write("sceneType = " + self.scene_type + "\n")
-    
-    def resize_color(self, w, h):
-        scale_x = w / self.color_width
-        scale_y = h / self.color_height
-        self.color_width = w
-        self.color_height = h
-        self.fx_color *= scale_x
-        self.fy_color *= scale_y
-        self.mx_color *= scale_x
-        self.my_color *= scale_y
+    def resize_depth(self, w, h):
+        scale_x = w / self.depth_width
+        scale_y = h / self.depth_height
+        self.calibration_depth_intrinsic = np.diag([scale_x, scale_y, 1, 1]) @ self.calibration_depth_intrinsic
+        self.depth_width = w
+        self.depth_height = h
 
 
 def mat4_str(mat4):
@@ -144,66 +81,103 @@ def mat3_str(mat3):
 
 def convert_pgms(input_path):
     def convert_to_png(filename):
+        if filename.startswith("."):
+            return
         # convert .pgm depth frames to .png
         if filename.lower().endswith(".depth.pgm"):
-            if convert_pgm_to_png:
+            if opt.convert_pgm_to_png:
                 filepath = input_path + "/" + filename
                 img = Image.open(filepath)
                 img.save(filepath[0:-4] + ".png", "png")
                 os.remove(filepath)
         # reduce color image sizes to 640x480 
         elif filename.lower().endswith(".color.jpg"):
-            if resize_color_img:
+            if opt.resize_color_img:
                 filepath = input_path + "/" + filename
                 img = Image.open(filepath)
                 w, h = img.size
-                if w != color_width or h != color_height:
-                    img = img.resize((color_width, color_height))
+                if w != opt.color_width or h != opt.color_height:
+                    img = img.resize((opt.color_width, opt.color_height))
                     img.save(filepath)
 
     # todo - manage threads and processes better
-    with ThreadPool(processes=psutil.cpu_count(logical=False)-1) as p:
+    with ThreadPool(processes=opt.num_threads_png) as p:
         p.map(convert_to_png, os.listdir(input_path))
     
     # rewrite color intrinsic matrix
-    if resize_color_img:
+    if opt.resize_color_img:
         info_file = input_path + "/_info.txt"
         if os.path.exists(info_file):
             info = SceneInfo(info_file)
-            info.resize_color(color_width, color_height)
+            info.resize_color(opt.color_width, opt.color_height)
             info.write(info_file)
-
-        # note - not using this txt file, so ignore it for now
-        #other_info_file = input_path + "/" + os.path.basename(input_path) + ".txt"
-        #if os.path.exists(other_info_file):
-        #    info = SceneInformation(other_info_file)
-        #    info.resize_color(color_width, color_height)
-        #    info.write(other_info_file)
 
 
 def process_sens(scan_id):
+    if scan_id.startswith("."):
+        return
     print("processing " + scan_id)
-    scanpath = input_dir + "/" + scan_id
+    scanpath = opt.input_dir + "/" + scan_id
     sensfile = scanpath + "/" + scan_id + ".sens"
-    outpath = output_dir + "/" + scan_id
+    outpath = opt.output_dir + "/" + scan_id
     if not os.path.exists(outpath):
         os.makedirs(outpath)
 
     # use C++ sens reader to extract sensor frames
     if os.path.exists(sensfile):
-        subprocess.call([sens_reader_path.replace("/", os.path.sep),
+        subprocess.call([opt.sens_reader_path.replace("/", os.path.sep),
                 sensfile.replace("/", os.path.sep), outpath.replace("/", os.path.sep)])
 
     # convert depth images to pngs, and resize color images
     convert_pgms(outpath)
 
-    if remove_sens_file and os.path.exists(sensfile):
+    if opt.remove_sens_file and os.path.exists(sensfile):
         os.remove(sensfile)
-
 
 
 if __name__ == '__main__':
 
+    parser = argparse.ArgumentParser(
+        description='Convenience script to extract the .sens files for each scan, '
+                'convert depth images from pgm to png, '
+                'and resize color images to 480x640.',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument(
+        'sens_reader_path', type=str,
+        help='Path to the SensReader executable provided by ScanNet: '
+                'https://github.com/ScanNet/ScanNet/tree/master/SensReader/c%2B%2B')
+    parser.add_argument(
+        'input_dir', type=str,
+        help='Path to the directory of scans')
+    parser.add_argument(
+        '--output_dir', type=str, default=None,
+        help='Output directory for extracted frames. Defaults to input_dir.')
+    parser.add_argument(
+        '--convert_pgm_to_png', action='store_true',
+        help='Convert depth images from .pgm to .png')
+    parser.add_argument(
+        '--remove_sens_file', action='store_true',
+        help='Delete the original .sens files after extracting')
+    parser.add_argument(
+        '--resize_color_img', action='store_true',
+        help='Resize the color images after extracting them')
+    parser.add_argument(
+        '--color_width', type=int, default=640,
+        help='Resize the color images to this width')
+    parser.add_argument(
+        '--color_height', type=int, default=480,
+        help='Resize the color images to this height')
+    parser.add_argument(
+        '--num_threads_sens', type=int, default=psutil.cpu_count(logical=False),
+        help='Number of scan extraction threads')
+    parser.add_argument(
+        '--num_threads_png', type=int, default=psutil.cpu_count(logical=False),
+        help='Number of image conversion threads')
+    opt = parser.parse_args()
+
+    if opt.output_dir == None:
+        opt.output_dir = opt.input_dir
+        
     # todo - manage threads and processes better
-    with ThreadPool(processes=psutil.cpu_count(logical=False)-1) as p:
-        p.map(process_sens, os.listdir(input_dir))
+    with ThreadPool(processes=opt.num_threads_sens) as p:
+        p.map(process_sens, os.listdir(opt.input_dir))

@@ -11,7 +11,7 @@ from models.utils import SceneInfo
 
 #random.seed(3)
 
-# separating these objects so that the data loader doesnt attempt to copy them to other processes
+# separating these objects to prevent copying them to other processes
 class SceneFiles():
 
     def __init__(self, train_path, scan_path):

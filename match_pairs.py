@@ -139,6 +139,9 @@ if __name__ == '__main__':
     parser.add_argument(
         '--force_cpu', action='store_true',
         help='Force pytorch to run in CPU mode.')
+    parser.add_argument(
+        '--weights', type=str, default=None,
+        help='Path to superglue weights file')
 
     opt = parser.parse_args()
     print(opt)
@@ -191,6 +194,9 @@ if __name__ == '__main__':
         }
     }
     matching = Matching(config).eval().to(device)
+
+    if opt.weights is not None:
+        matching.superglue.load_state_dict(torch.load(opt.weights))
 
     # Create the output directories if they do not exist already.
     input_dir = Path(opt.input_dir)
